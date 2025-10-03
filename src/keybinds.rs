@@ -32,10 +32,16 @@ impl KeyMap {
                 vec![
                     (KeyCode::Char('q'), KeyModifiers::NONE),
                     (KeyCode::Esc, KeyModifiers::NONE),
-                    (KeyCode::Char('c'), KeyModifiers::CONTROL),
                 ],
             ),
             help: KeyBinding::new("Show help", vec![(KeyCode::Char('?'), KeyModifiers::NONE)]),
         }
+    }
+
+    pub fn get_bindings(&self) -> Vec<(&'static str, Vec<(KeyCode, KeyModifiers)>)> {
+        vec![
+            (self.quit.description, self.quit.keys.clone()),
+            (self.help.description, self.help.keys.clone()),
+        ]
     }
 }

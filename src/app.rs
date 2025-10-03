@@ -1,23 +1,29 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Layout, Margin, Rect},
-    style::{Style, Stylize},
+    layout::{Constraint, Layout, Rect},
     symbols,
-    text::Text,
     widgets::{Block, Clear, StatefulWidget, Widget},
 };
 
+use crate::widgets::{HelpModal, HelpModalState, Sidebar, SidebarState};
+
 #[derive(Debug, Default)]
 pub struct App {
-    pub counter: u8,
-    pub exit: bool,
+    pub sidebar_state: SidebarState,
+    pub help_modal_state: HelpModalState,
 }
 
-// Estructura unitaria???????????
-// Estructura sin valor/tamaño
-pub struct AppUi;
+pub struct AppUi<'a> {
+    pub keymap: &'a crate::keybinds::KeyMap,
+}
 
-impl StatefulWidget for AppUi {
+impl<'a> AppUi<'a> {
+    pub fn new(keymap: &'a crate::keybinds::KeyMap) -> Self {
+        Self { keymap }
+    }
+}
+
+impl<'a> StatefulWidget for AppUi<'a> {
     type State = App;
 
     /// `area` es la region donde debes renderizar
@@ -26,39 +32,18 @@ impl StatefulWidget for AppUi {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         Clear.render(area, buf);
 
+        let full_area = Rect {
+            x: 0,
+            y: 0,
+            width: buf.area.width,
+            height: buf.area.height,
+        };
+
         let area = Layout::horizontal(vec![Constraint::Percentage(20), Constraint::Percentage(80)])
             .split(area);
 
         // Sidebar
-        {
-            let area = Layout::vertical(vec![Constraint::Length(3), Constraint::Percentage(100)])
-                .split(area[0]);
-
-            Block::bordered()
-                .title("Requests")
-                .style(Style::new().bold())
-                .border_set(symbols::border::ROUNDED)
-                .render(area[1], buf);
-
-            let title_secrets =
-                Layout::horizontal(vec![Constraint::Percentage(100), Constraint::Length(11)])
-                    .split(area[0]);
-
-            let text_area = title_secrets[0].inner(Margin::new(1, 1));
-            Text::from("End*").centered().bold().render(text_area, buf);
-            Block::bordered()
-                .border_set(symbols::border::ROUNDED)
-                .render(title_secrets[0], buf);
-
-            let text_area = title_secrets[1].inner(Margin::new(1, 1));
-            Text::from("Secrets")
-                .centered()
-                .bold()
-                .render(text_area, buf);
-            Block::bordered()
-                .border_set(symbols::border::ROUNDED)
-                .render(title_secrets[1], buf);
-        }
+        Sidebar.render(area[0], buf, &mut state.sidebar_state);
 
         // Main && Toolbar
         {
@@ -88,5 +73,7 @@ impl StatefulWidget for AppUi {
                 .border_set(symbols::border::ROUNDED)
                 .render(toolbar[2], buf);
         }
+
+        HelpModal::new(self.keymap).render(full_area, buf, &mut state.help_modal_state);
     }
 }
