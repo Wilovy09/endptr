@@ -219,7 +219,7 @@ impl App {
         }
     }
 
-    pub fn save_request_as(&mut self, name: String) {
+    pub fn save_request_as(&mut self, name: String, description: Option<String>) {
         // Save into the first collection by default (or the active one).
         // Future: let user pick target collection.
         let col_idx = self
@@ -235,7 +235,7 @@ impl App {
                 password: self.request_panel_state.auth_password.value.clone(),
                 token: self.request_panel_state.auth_token.value.clone(),
             };
-            let item = CurrentRequest {
+            let mut item = CurrentRequest {
                 method: self.current.method.clone(),
                 url: self.url_input.value.clone(),
                 headers: self.current.headers.clone(),
@@ -244,6 +244,13 @@ impl App {
                 params: self.current.params.clone(),
             }
             .to_postman_item(&name);
+
+            // Preserve existing description if none provided
+            if description.is_some() {
+                item.description = description;
+            } else if let Some(existing) = col.item.iter().find(|i| i.name == name) {
+                item.description = existing.description.clone();
+            }
 
             if let Some(existing) = col.item.iter_mut().find(|i| i.name == name) {
                 *existing = item;
@@ -377,6 +384,8 @@ impl App {
             self.open_modal(
                 Modal::SaveRequest {
                     name_input: TextInput::default(),
+                    desc_input: TextInput::default(),
+                    field: 0,
                 },
                 ModalContext::SaveRequest,
             );
@@ -470,6 +479,8 @@ impl App {
                         self.open_modal(
                             Modal::SaveRequest {
                                 name_input: TextInput::default(),
+                                desc_input: TextInput::default(),
+                                field: 0,
                             },
                             ModalContext::NewCollection,
                         );
@@ -477,6 +488,8 @@ impl App {
                         self.open_modal(
                             Modal::SaveRequest {
                                 name_input: TextInput::default(),
+                                desc_input: TextInput::default(),
+                                field: 0,
                             },
                             ModalContext::SaveRequest,
                         );
@@ -485,6 +498,8 @@ impl App {
                     self.open_modal(
                         Modal::SaveRequest {
                             name_input: TextInput::default(),
+                            desc_input: TextInput::default(),
+                            field: 0,
                         },
                         ModalContext::NewFolder,
                     );
@@ -751,21 +766,40 @@ impl App {
         let ctx = self.modal_ctx.take();
 
         match modal {
-            Modal::SaveRequest { mut name_input } => {
+            Modal::SaveRequest {
+                mut name_input,
+                mut desc_input,
+                mut field,
+            } => {
                 if km.confirm.matches(&key) {
                     let name = name_input.value.trim().to_string();
                     if !name.is_empty() {
+                        let desc = desc_input.value.trim().to_string();
+                        let description = if desc.is_empty() { None } else { Some(desc) };
                         match ctx {
                             Some(ModalContext::NewCollection) => self.new_collection(name),
                             Some(ModalContext::NewFolder) => self.add_folder(name),
-                            _ => self.save_request_as(name),
+                            _ => self.save_request_as(name, description),
                         }
                     }
                 } else if km.cancel.matches(&key) {
                     // discard
+                } else if key.code == KeyCode::Tab {
+                    field = if field == 0 { 1 } else { 0 };
+                    self.modal = Some(Modal::SaveRequest {
+                        name_input,
+                        desc_input,
+                        field,
+                    });
+                    self.modal_ctx = ctx;
                 } else {
-                    input_key(&mut name_input, key.code);
-                    self.modal = Some(Modal::SaveRequest { name_input });
+                    let target = if field == 0 { &mut name_input } else { &mut desc_input };
+                    input_key(target, key.code);
+                    self.modal = Some(Modal::SaveRequest {
+                        name_input,
+                        desc_input,
+                        field,
+                    });
                     self.modal_ctx = ctx;
                 }
             }
