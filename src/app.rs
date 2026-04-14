@@ -70,6 +70,7 @@ pub enum ModalContext {
     DeleteRequest { col_idx: usize, item_path: ItemPath },
     DeleteCollection { col_idx: usize },
     DeleteSecret { key: String },
+    RequestInfo,
 }
 
 // ── App State ─────────────────────────────────────────────────────────────────
@@ -406,12 +407,44 @@ impl App {
     }
 
     fn handle_sidebar_key(&mut self, key: KeyEvent, km: &KeyMap) {
+        use crossterm::event::KeyCode;
         match self.sidebar_state.section.clone() {
             SidebarSection::Requests => {
                 if km.down.matches(&key) {
                     self.sidebar_state.next();
                 } else if km.up.matches(&key) {
                     self.sidebar_state.prev();
+                } else if key.code == KeyCode::Char('i') {
+                    // Show request info modal for selected request
+                    let node = self.sidebar_state.selected_node().cloned();
+                    if let Some(node) = node {
+                        if node.is_request() {
+                            if let Some((_, col)) = self.collections.get(node.col_idx) {
+                                if let Some(item) =
+                                    resolve_path(&col.item, &node.item_path)
+                                {
+                                    let description = item
+                                        .description
+                                        .clone()
+                                        .unwrap_or_default();
+                                    let secrets_used = item
+                                        .request
+                                        .as_ref()
+                                        .map(|r| extract_secrets_used(r, &self.secrets))
+                                        .unwrap_or_default();
+                                    self.open_modal(
+                                        Modal::RequestInfo {
+                                            description,
+                                            secrets_used,
+                                            show_secrets: false,
+                                            scroll: 0,
+                                        },
+                                        ModalContext::RequestInfo,
+                                    );
+                                }
+                            }
+                        }
+                    }
                 } else if km.confirm.matches(&key) {
                     // If request → load; if collection/folder → toggle
                     let is_req = self
@@ -817,11 +850,132 @@ impl App {
                 // any other key = cancel (modal already taken)
                 let _ = message;
             }
+
+            Modal::RequestInfo {
+                description,
+                secrets_used,
+                mut show_secrets,
+                mut scroll,
+            } => {
+                if km.cancel.matches(&key) {
+                    // close — modal already taken, just drop it
+                } else if key.code == KeyCode::Char('t') {
+                    show_secrets = !show_secrets;
+                    self.modal = Some(Modal::RequestInfo {
+                        description,
+                        secrets_used,
+                        show_secrets,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                } else if km.down.matches(&key) || key.code == KeyCode::Char('j') {
+                    scroll = scroll.saturating_add(1);
+                    self.modal = Some(Modal::RequestInfo {
+                        description,
+                        secrets_used,
+                        show_secrets,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                } else if km.up.matches(&key) || key.code == KeyCode::Char('k') {
+                    scroll = scroll.saturating_sub(1);
+                    self.modal = Some(Modal::RequestInfo {
+                        description,
+                        secrets_used,
+                        show_secrets,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                } else {
+                    // re-open unchanged
+                    self.modal = Some(Modal::RequestInfo {
+                        description,
+                        secrets_used,
+                        show_secrets,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                }
+            }
         }
     }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Scan text for `{{key}}` placeholders and return their names.
+fn template_keys(text: &str) -> Vec<String> {
+    let mut keys = Vec::new();
+    let mut s = text;
+    while let Some(start) = s.find("{{") {
+        let rest = &s[start + 2..];
+        if let Some(end) = rest.find("}}") {
+            let key = rest[..end].trim().to_string();
+            if !key.is_empty() {
+                keys.push(key);
+            }
+            s = &rest[end + 2..];
+        } else {
+            break;
+        }
+    }
+    keys
+}
+
+/// Collect all secrets referenced by a request (URL, headers, body, auth).
+fn extract_secrets_used(
+    req: &crate::models::PostmanRequest,
+    secrets: &crate::models::Secrets,
+) -> Vec<(String, String)> {
+    let mut found = std::collections::HashSet::new();
+
+    // URL
+    for k in template_keys(&req.url.raw) {
+        found.insert(k);
+    }
+    // Headers
+    for h in &req.header {
+        for k in template_keys(&h.value) {
+            found.insert(k);
+        }
+    }
+    // Body
+    if let Some(body) = &req.body {
+        if let Some(raw) = &body.raw {
+            for k in template_keys(raw) {
+                found.insert(k);
+            }
+        }
+    }
+    // Auth fields
+    if let Some(auth) = &req.auth {
+        if let Some(fields) = &auth.basic {
+            for f in fields {
+                for k in template_keys(&f.value) {
+                    found.insert(k);
+                }
+            }
+        }
+        if let Some(fields) = &auth.bearer {
+            for f in fields {
+                for k in template_keys(&f.value) {
+                    found.insert(k);
+                }
+            }
+        }
+    }
+
+    let mut result: Vec<(String, String)> = found
+        .into_iter()
+        .filter_map(|k| {
+            secrets
+                .get(&k)
+                .map(|v| (k, v.clone()))
+        })
+        .collect();
+    result.sort_by(|a, b| a.0.cmp(&b.0));
+    result
+}
 
 fn input_key(input: &mut TextInput, code: crossterm::event::KeyCode) {
     use crossterm::event::KeyCode;
