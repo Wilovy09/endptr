@@ -109,7 +109,7 @@ impl<'a> Widget for ResponsePanel<'a> {
             }
             None if !self.is_loading => {
                 Paragraph::new(Span::styled(
-                    "Press ▶  or <Enter> in URL bar to send",
+                    "Press <Enter> in URL bar to send",
                     Style::new().fg(Color::DarkGray).italic(),
                 ))
                 .render(inner, buf);

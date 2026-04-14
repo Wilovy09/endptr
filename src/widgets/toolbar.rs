@@ -22,7 +22,6 @@ pub enum ToolbarFocus {
     None,
     Method,
     Url,
-    Send,
 }
 
 impl<'a> Toolbar<'a> {
@@ -43,11 +42,10 @@ impl<'a> Toolbar<'a> {
 
 impl<'a> Widget for Toolbar<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // [Method 10%] [URL 85%] [Send 5%]
+        // [Method 10%] [URL 90%]
         let cols = Layout::horizontal([
             Constraint::Percentage(10),
-            Constraint::Percentage(85),
-            Constraint::Percentage(5),
+            Constraint::Percentage(90),
         ])
         .split(area);
 
@@ -87,31 +85,5 @@ impl<'a> Widget for Toolbar<'a> {
             Paragraph::new(line).render(inner, buf);
         }
 
-        // ── Send button ───────────────────────────────────────────────────────
-        {
-            let focused = self.focus == ToolbarFocus::Send;
-            let (label, style) = if self.is_loading {
-                ("...", Style::new().fg(Color::Yellow))
-            } else if focused {
-                (" ▶ ", Style::new().fg(Color::Black).bg(Color::Green))
-            } else {
-                (" ▶ ", Style::new().fg(Color::Green))
-            };
-
-            let block = Block::bordered()
-                .border_set(ROUNDED)
-                .border_style(if focused {
-                    Style::new().fg(Color::Yellow)
-                } else {
-                    Style::new().fg(Color::White)
-                });
-
-            let inner = cols[2].inner(Margin::new(1, 1));
-            block.render(cols[2], buf);
-
-            Paragraph::new(Span::styled(label, style))
-                .centered()
-                .render(inner, buf);
-        }
     }
 }
