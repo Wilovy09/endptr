@@ -1,10 +1,10 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Style},
     symbols::border::ROUNDED,
-    text::{Line, Span},
-    widgets::{Block, Clear, Paragraph, Widget},
+    text::Span,
+    widgets::{Block, Clear, Paragraph, Widget, Wrap},
 };
 
 use crate::{components::centered_rect, widgets::input::TextInput};
@@ -189,7 +189,7 @@ fn render_confirm(area: Rect, buf: &mut Buffer, message: &str) {
     let inner = modal.inner(Margin::new(2, 2));
     Paragraph::new(message)
         .style(Style::new().fg(Color::White))
-        .wrap(ratatui::widgets::Wrap { trim: true })
+        .wrap(Wrap { trim: true })
         .render(inner, buf);
 
     let hint = Rect {
