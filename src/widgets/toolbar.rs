@@ -7,10 +7,7 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use crate::{
-    models::HttpMethod,
-    widgets::input::TextInput,
-};
+use crate::{models::HttpMethod, widgets::input::TextInput};
 
 pub struct Toolbar<'a> {
     pub method: &'a HttpMethod,

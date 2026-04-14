@@ -97,7 +97,11 @@ impl RequestPanelState {
         if max == 0 {
             self.auth_field = 0;
         } else {
-            self.auth_field = if self.auth_field == 0 { max } else { self.auth_field - 1 };
+            self.auth_field = if self.auth_field == 0 {
+                max
+            } else {
+                self.auth_field - 1
+            };
         }
     }
 
@@ -141,10 +145,13 @@ impl<'a> StatefulWidget for RequestPanel<'a> {
     type State = RequestPanelState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let focus_color = if self.focused { Color::Yellow } else { Color::White };
+        let focus_color = if self.focused {
+            Color::Yellow
+        } else {
+            Color::White
+        };
 
-        let layout =
-            Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
+        let layout = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
 
         // ── Tab bar ───────────────────────────────────────────────────────────
         Tabs::new(vec!["Body", "Headers", "Auth", "Params"])
@@ -221,7 +228,12 @@ fn render_headers(
             Style::new().fg(Color::DarkGray),
         ))
         .render(
-            Rect { x: area.x, y: area.y + area.height - 1, width: area.width, height: 1 },
+            Rect {
+                x: area.x,
+                y: area.y + area.height - 1,
+                width: area.width,
+                height: 1,
+            },
             buf,
         );
     }
@@ -311,8 +323,7 @@ fn render_auth(area: Rect, buf: &mut Buffer, focused: bool, state: &mut RequestP
                 _ => "Token:",
             };
             let tok_focused = focused && state.auth_field == 1;
-            Paragraph::new(Span::styled(label, Style::new().fg(Color::Gray)))
-                .render(rows[2], buf);
+            Paragraph::new(Span::styled(label, Style::new().fg(Color::Gray))).render(rows[2], buf);
             Paragraph::new(state.auth_token.as_line(tok_focused)).render(rows[3], buf);
         }
     }
@@ -324,7 +335,12 @@ fn render_auth(area: Rect, buf: &mut Buffer, focused: bool, state: &mut RequestP
             Style::new().fg(Color::DarkGray),
         ))
         .render(
-            Rect { x: area.x, y: area.y + area.height - 1, width: area.width, height: 1 },
+            Rect {
+                x: area.x,
+                y: area.y + area.height - 1,
+                width: area.width,
+                height: 1,
+            },
             buf,
         );
     }
@@ -350,7 +366,12 @@ fn render_params(
 
     // Header row
     if area.height >= 2 {
-        let header_area = Rect { x: area.x, y: area.y, width: area.width, height: 1 };
+        let header_area = Rect {
+            x: area.x,
+            y: area.y,
+            width: area.width,
+            height: 1,
+        };
         Paragraph::new(Line::from(vec![
             Span::styled("On ", Style::new().fg(Color::DarkGray).bold()),
             Span::styled(

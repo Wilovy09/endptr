@@ -50,8 +50,7 @@ pub fn highlight_json(json: &str) -> Vec<Line<'static>> {
 
             // ── String ───────────────────────────────────────────────────────
             '"' => {
-                let is_key =
-                    ctx_stack.last() == Some(&Ctx::Object) && !after_colon;
+                let is_key = ctx_stack.last() == Some(&Ctx::Object) && !after_colon;
 
                 let mut s = String::from('"');
                 let mut escaped = false;
@@ -128,14 +127,22 @@ pub fn highlight_json(json: &str) -> Vec<Line<'static>> {
             't' => {
                 let rest = read_word(&mut chars, 3);
                 let word = format!("t{rest}");
-                let color = if word == "true" { Color::Magenta } else { Color::White };
+                let color = if word == "true" {
+                    Color::Magenta
+                } else {
+                    Color::White
+                };
                 push_styled!(word, color);
                 after_colon = false;
             }
             'f' => {
                 let rest = read_word(&mut chars, 4);
                 let word = format!("f{rest}");
-                let color = if word == "false" { Color::Magenta } else { Color::White };
+                let color = if word == "false" {
+                    Color::Magenta
+                } else {
+                    Color::White
+                };
                 push_styled!(word, color);
                 after_colon = false;
             }

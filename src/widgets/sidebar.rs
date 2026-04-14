@@ -83,10 +83,7 @@ pub struct SidebarState {
 
 impl SidebarState {
     /// Rebuild the flat list from current collections + expand state.
-    pub fn rebuild(
-        &mut self,
-        collections: &[(PathBuf, PostmanCollection)],
-    ) {
+    pub fn rebuild(&mut self, collections: &[(PathBuf, PostmanCollection)]) {
         self.flat.clear();
         for (col_idx, (path, col)) in collections.iter().enumerate() {
             let col_key = expand_key(col_idx, &[]);
@@ -138,7 +135,11 @@ impl SidebarState {
         if max == 0 {
             return;
         }
-        let i = self.list_state.selected().map(|i| (i + 1) % max).unwrap_or(0);
+        let i = self
+            .list_state
+            .selected()
+            .map(|i| (i + 1) % max)
+            .unwrap_or(0);
         self.list_state.select(Some(i));
     }
 
@@ -159,7 +160,11 @@ impl SidebarState {
         if max == 0 {
             return;
         }
-        let i = self.secret_list.selected().map(|i| (i + 1) % max).unwrap_or(0);
+        let i = self
+            .secret_list
+            .selected()
+            .map(|i| (i + 1) % max)
+            .unwrap_or(0);
         self.secret_list.select(Some(i));
     }
 
@@ -244,14 +249,12 @@ impl<'a> StatefulWidget for Sidebar<'a> {
     type State = SidebarState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let layout =
-            Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
+        let layout = Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(area);
 
         // ── Tab bar ───────────────────────────────────────────────────────────
         {
-            let tabs =
-                Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-                    .split(layout[0].inner(Margin::new(1, 1)));
+            let tabs = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(layout[0].inner(Margin::new(1, 1)));
 
             Block::bordered().border_set(ROUNDED).render(layout[0], buf);
 
@@ -266,12 +269,22 @@ impl<'a> StatefulWidget for Sidebar<'a> {
                 Style::new().fg(Color::DarkGray)
             };
 
-            Paragraph::new("Requests").centered().style(req_style).render(tabs[0], buf);
-            Paragraph::new("Secrets").centered().style(sec_style).render(tabs[1], buf);
+            Paragraph::new("Requests")
+                .centered()
+                .style(req_style)
+                .render(tabs[0], buf);
+            Paragraph::new("Secrets")
+                .centered()
+                .style(sec_style)
+                .render(tabs[1], buf);
         }
 
         // ── Content ───────────────────────────────────────────────────────────
-        let focus_color = if self.focused { Color::Yellow } else { Color::White };
+        let focus_color = if self.focused {
+            Color::Yellow
+        } else {
+            Color::White
+        };
         let block = Block::bordered()
             .border_set(ROUNDED)
             .border_style(Style::new().fg(focus_color));

@@ -69,7 +69,13 @@ pub fn create_collection(name: &str) -> std::io::Result<(PathBuf, PostmanCollect
     // Sanitize filename
     let filename = name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect::<String>();
     let path = endptr_dir().join(format!("{filename}.json"));
     let col = PostmanCollection::new(name);

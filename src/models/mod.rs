@@ -177,8 +177,16 @@ fn base64_encode(input: &[u8]) -> String {
     let mut out = String::new();
     for chunk in input.chunks(3) {
         let b0 = chunk[0] as usize;
-        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
+        let b1 = if chunk.len() > 1 {
+            chunk[1] as usize
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            chunk[2] as usize
+        } else {
+            0
+        };
         out.push(CHARS[(b0 >> 2)] as char);
         out.push(CHARS[((b0 & 3) << 4) | (b1 >> 4)] as char);
         if chunk.len() > 1 {
@@ -492,11 +500,7 @@ impl From<&PostmanRequest> for CurrentRequest {
             })
             .collect();
 
-        let auth = req
-            .auth
-            .as_ref()
-            .map(|a| a.to_config())
-            .unwrap_or_default();
+        let auth = req.auth.as_ref().map(|a| a.to_config()).unwrap_or_default();
 
         Self {
             method: HttpMethod::from_str(&req.method),

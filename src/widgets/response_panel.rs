@@ -23,13 +23,22 @@ impl<'a> ResponsePanel<'a> {
         scroll: u16,
         focused: bool,
     ) -> Self {
-        Self { response, is_loading, scroll, focused }
+        Self {
+            response,
+            is_loading,
+            scroll,
+            focused,
+        }
     }
 }
 
 impl<'a> Widget for ResponsePanel<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let focus_color = if self.focused { Color::Yellow } else { Color::White };
+        let focus_color = if self.focused {
+            Color::Yellow
+        } else {
+            Color::White
+        };
 
         // ── Title / status line ───────────────────────────────────────────────
         let title: Line = match &self.response {
@@ -67,8 +76,10 @@ impl<'a> Widget for ResponsePanel<'a> {
         match &self.response {
             Some(Ok(r)) => {
                 let content_height = inner.height.saturating_sub(1); // reserve hint row
-                let content_area =
-                    Rect { height: content_height, ..inner };
+                let content_area = Rect {
+                    height: content_height,
+                    ..inner
+                };
 
                 let lines = highlight::highlight_json_str(&r.body);
                 Paragraph::new(Text::from(lines))

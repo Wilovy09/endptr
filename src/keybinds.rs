@@ -42,11 +42,11 @@ pub struct KeyMap {
 impl KeyMap {
     pub fn new() -> Self {
         Self {
-            quit: KeyBinding::new(
-                "Quit",
-                vec![(KeyCode::Char('q'), KeyModifiers::CONTROL)],
+            quit: KeyBinding::new("Quit", vec![(KeyCode::Char('q'), KeyModifiers::CONTROL)]),
+            help: KeyBinding::new(
+                "Toggle help",
+                vec![(KeyCode::Char('?'), KeyModifiers::NONE)],
             ),
-            help: KeyBinding::new("Toggle help", vec![(KeyCode::Char('?'), KeyModifiers::NONE)]),
             send: KeyBinding::new(
                 "Send request",
                 vec![
@@ -90,11 +90,17 @@ impl KeyMap {
             cancel: KeyBinding::new("Cancel / close", vec![(KeyCode::Esc, KeyModifiers::NONE)]),
             method_next: KeyBinding::new(
                 "Next HTTP method",
-                vec![(KeyCode::Right, KeyModifiers::NONE), (KeyCode::Char('l'), KeyModifiers::NONE)],
+                vec![
+                    (KeyCode::Right, KeyModifiers::NONE),
+                    (KeyCode::Char('l'), KeyModifiers::NONE),
+                ],
             ),
             method_prev: KeyBinding::new(
                 "Prev HTTP method",
-                vec![(KeyCode::Left, KeyModifiers::NONE), (KeyCode::Char('h'), KeyModifiers::NONE)],
+                vec![
+                    (KeyCode::Left, KeyModifiers::NONE),
+                    (KeyCode::Char('h'), KeyModifiers::NONE),
+                ],
             ),
             new_folder: KeyBinding::new(
                 "New folder",
@@ -119,7 +125,10 @@ impl KeyMap {
             (self.down.description, self.down.keys.clone()),
             (self.new_item.description, self.new_item.keys.clone()),
             (self.delete_item.description, self.delete_item.keys.clone()),
-            (self.toggle_section.description, self.toggle_section.keys.clone()),
+            (
+                self.toggle_section.description,
+                self.toggle_section.keys.clone(),
+            ),
             (self.method_next.description, self.method_next.keys.clone()),
             (self.method_prev.description, self.method_prev.keys.clone()),
             (self.new_folder.description, self.new_folder.keys.clone()),

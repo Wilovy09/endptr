@@ -12,7 +12,7 @@ use ratatui::{
 use crate::{
     http_client,
     keybinds::KeyMap,
-    models::{resolve_path, CurrentRequest, HttpResponse, ItemPath, PostmanCollection, Secrets},
+    models::{CurrentRequest, HttpResponse, ItemPath, PostmanCollection, Secrets, resolve_path},
     storage,
     widgets::{
         HelpModal, HelpModalState, Modal, RequestPanel, RequestPanelState, RequestTab,
@@ -201,8 +201,10 @@ impl App {
                     self.body_input = TextInput::new(cr.body.clone());
                     // Populate auth panel state from loaded config
                     self.request_panel_state.auth_type = cr.auth.auth_type.clone();
-                    self.request_panel_state.auth_username = TextInput::new(cr.auth.username.clone());
-                    self.request_panel_state.auth_password = TextInput::new(cr.auth.password.clone());
+                    self.request_panel_state.auth_username =
+                        TextInput::new(cr.auth.username.clone());
+                    self.request_panel_state.auth_password =
+                        TextInput::new(cr.auth.password.clone());
                     self.request_panel_state.auth_token = TextInput::new(cr.auth.token.clone());
                     self.request_panel_state.auth_field = 0;
                     self.current = cr;
@@ -370,9 +372,12 @@ impl App {
             return false;
         }
         if km.save.matches(&key) {
-            self.open_modal(Modal::SaveRequest {
-                name_input: TextInput::default(),
-            }, ModalContext::SaveRequest);
+            self.open_modal(
+                Modal::SaveRequest {
+                    name_input: TextInput::default(),
+                },
+                ModalContext::SaveRequest,
+            );
             return false;
         }
         if km.tab_next.matches(&key) {
@@ -429,18 +434,24 @@ impl App {
                         .unwrap_or(true);
                     if is_col {
                         self.open_modal(
-                            Modal::SaveRequest { name_input: TextInput::default() },
+                            Modal::SaveRequest {
+                                name_input: TextInput::default(),
+                            },
                             ModalContext::NewCollection,
                         );
                     } else {
                         self.open_modal(
-                            Modal::SaveRequest { name_input: TextInput::default() },
+                            Modal::SaveRequest {
+                                name_input: TextInput::default(),
+                            },
                             ModalContext::SaveRequest,
                         );
                     }
                 } else if km.new_folder.matches(&key) {
                     self.open_modal(
-                        Modal::SaveRequest { name_input: TextInput::default() },
+                        Modal::SaveRequest {
+                            name_input: TextInput::default(),
+                        },
                         ModalContext::NewFolder,
                     );
                 } else if km.delete_item.matches(&key) {
@@ -611,13 +622,11 @@ impl App {
 
             RequestTab::Auth => match key.code {
                 KeyCode::Left => {
-                    self.request_panel_state.auth_type =
-                        self.request_panel_state.auth_type.prev();
+                    self.request_panel_state.auth_type = self.request_panel_state.auth_type.prev();
                     self.request_panel_state.auth_field = 0;
                 }
                 KeyCode::Right => {
-                    self.request_panel_state.auth_type =
-                        self.request_panel_state.auth_type.next();
+                    self.request_panel_state.auth_type = self.request_panel_state.auth_type.next();
                     self.request_panel_state.auth_field = 0;
                 }
                 KeyCode::Tab => self.request_panel_state.auth_next_field(),
@@ -724,7 +733,11 @@ impl App {
                 }
             }
 
-            Modal::AddSecret { mut key_input, mut val_input, mut field } => {
+            Modal::AddSecret {
+                mut key_input,
+                mut val_input,
+                mut field,
+            } => {
                 if km.confirm.matches(&key) {
                     let k = key_input.value.trim().to_string();
                     let v = val_input.value.trim().to_string();
@@ -732,7 +745,9 @@ impl App {
                         if ctx == Some(ModalContext::AddHeader) {
                             self.current.headers.push((k, v));
                         } else if ctx == Some(ModalContext::AddParam) {
-                            self.current.params.push(crate::models::QueryParam::new(k, v));
+                            self.current
+                                .params
+                                .push(crate::models::QueryParam::new(k, v));
                         } else {
                             self.add_secret(k, v);
                         }
@@ -740,17 +755,32 @@ impl App {
                 } else if km.cancel.matches(&key) {
                 } else if key.code == KeyCode::Tab {
                     field = if field == 0 { 1 } else { 0 };
-                    self.modal = Some(Modal::AddSecret { key_input, val_input, field });
+                    self.modal = Some(Modal::AddSecret {
+                        key_input,
+                        val_input,
+                        field,
+                    });
                     self.modal_ctx = ctx;
                 } else {
-                    let target = if field == 0 { &mut key_input } else { &mut val_input };
+                    let target = if field == 0 {
+                        &mut key_input
+                    } else {
+                        &mut val_input
+                    };
                     input_key(target, key.code);
-                    self.modal = Some(Modal::AddSecret { key_input, val_input, field });
+                    self.modal = Some(Modal::AddSecret {
+                        key_input,
+                        val_input,
+                        field,
+                    });
                     self.modal_ctx = ctx;
                 }
             }
 
-            Modal::EditSecret { key: secret_key, mut val_input } => {
+            Modal::EditSecret {
+                key: secret_key,
+                mut val_input,
+            } => {
                 if km.confirm.matches(&key) {
                     let v = val_input.value.trim().to_string();
                     self.secrets.insert(secret_key.clone(), v);
@@ -759,7 +789,10 @@ impl App {
                 } else if km.cancel.matches(&key) {
                 } else {
                     input_key(&mut val_input, key.code);
-                    self.modal = Some(Modal::EditSecret { key: secret_key, val_input });
+                    self.modal = Some(Modal::EditSecret {
+                        key: secret_key,
+                        val_input,
+                    });
                     self.modal_ctx = ctx;
                 }
             }
@@ -825,13 +858,15 @@ impl<'a> StatefulWidget for AppUi<'a> {
             height: buf.area.height,
         };
 
-        let root =
-            Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
-                .split(area);
+        let root = Layout::horizontal([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .split(area);
 
         // Sidebar
-        Sidebar::new(&state.secrets, state.focus == AppFocus::Sidebar)
-            .render(root[0], buf, &mut state.sidebar_state);
+        Sidebar::new(&state.secrets, state.focus == AppFocus::Sidebar).render(
+            root[0],
+            buf,
+            &mut state.sidebar_state,
+        );
 
         // Right: toolbar | request panel | response
         let right = Layout::vertical([
@@ -846,8 +881,13 @@ impl<'a> StatefulWidget for AppUi<'a> {
             AppFocus::Url => ToolbarFocus::Url,
             _ => ToolbarFocus::None,
         };
-        Toolbar::new(&state.current.method, &state.url_input, state.is_loading, toolbar_focus)
-            .render(right[0], buf);
+        Toolbar::new(
+            &state.current.method,
+            &state.url_input,
+            state.is_loading,
+            toolbar_focus,
+        )
+        .render(right[0], buf);
 
         RequestPanel::new(
             &state.body_input,
