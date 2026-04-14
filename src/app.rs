@@ -616,25 +616,28 @@ impl App {
         }
 
         match self.request_panel_state.tab.clone() {
-            RequestTab::Body => match key.code {
-                KeyCode::Backspace => self.body_input.delete_before(),
-                KeyCode::Delete => self.body_input.delete_after(),
-                KeyCode::Left => self.body_input.move_left(),
-                KeyCode::Right => self.body_input.move_right(),
-                KeyCode::Up => self.body_input.move_up(),
-                KeyCode::Down => self.body_input.move_down(),
-                KeyCode::Home => self.body_input.move_to_line_start(),
-                KeyCode::End => self.body_input.move_to_line_end(),
-                KeyCode::Enter => self.body_input.insert_newline(),
-                KeyCode::Char('y') => {
+            RequestTab::Body => {
+                if km.copy.matches(&key) {
                     match crate::highlight::copy_to_clipboard(&self.body_input.value) {
                         Ok(_) => self.status = Some("Body copied to clipboard".to_string()),
                         Err(e) => self.status = Some(format!("Copy failed: {e}")),
                     }
+                } else {
+                    match key.code {
+                        KeyCode::Backspace => self.body_input.delete_before(),
+                        KeyCode::Delete => self.body_input.delete_after(),
+                        KeyCode::Left => self.body_input.move_left(),
+                        KeyCode::Right => self.body_input.move_right(),
+                        KeyCode::Up => self.body_input.move_up(),
+                        KeyCode::Down => self.body_input.move_down(),
+                        KeyCode::Home => self.body_input.move_to_line_start(),
+                        KeyCode::End => self.body_input.move_to_line_end(),
+                        KeyCode::Enter => self.body_input.insert_newline(),
+                        KeyCode::Char(c) => self.body_input.insert(c),
+                        _ => {}
+                    }
                 }
-                KeyCode::Char(c) => self.body_input.insert(c),
-                _ => {}
-            },
+            }
 
             RequestTab::Headers => {
                 let max = self.current.headers.len();

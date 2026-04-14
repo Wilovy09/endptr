@@ -108,7 +108,7 @@ impl KeyMap {
             ),
             copy: KeyBinding::new(
                 "Copy to clipboard",
-                vec![(KeyCode::Char('y'), KeyModifiers::NONE)],
+                vec![(KeyCode::Char('y'), KeyModifiers::CONTROL)],
             ),
         }
     }
