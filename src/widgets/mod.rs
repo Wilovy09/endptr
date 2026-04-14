@@ -2,7 +2,7 @@ pub mod help_modal;
 pub use help_modal::*;
 
 pub mod input;
-pub use input::TextInput;
+pub use input::{TextArea, TextInput};
 
 pub mod modal;
 pub use modal::Modal;

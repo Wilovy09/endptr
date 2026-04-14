@@ -4,13 +4,13 @@ use ratatui::{
     style::{Color, Style},
     symbols::border::ROUNDED,
     text::{Line, Span, Text},
-    widgets::{Block, List, ListItem, ListState, Paragraph, StatefulWidget, Tabs, Widget},
+    widgets::{Block, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
 use crate::{
     highlight,
     models::{AuthType, QueryParam},
-    widgets::input::TextInput,
+    widgets::input::{TextArea, TextInput},
 };
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ impl RequestPanelState {
 // ── Widget ────────────────────────────────────────────────────────────────────
 
 pub struct RequestPanel<'a> {
-    pub body_input: &'a TextInput,
+    pub body_input: &'a TextArea,
     pub headers: &'a [(String, String)],
     pub params: &'a [QueryParam],
     pub focused: bool,
@@ -127,7 +127,7 @@ pub struct RequestPanel<'a> {
 
 impl<'a> RequestPanel<'a> {
     pub fn new(
-        body_input: &'a TextInput,
+        body_input: &'a TextArea,
         headers: &'a [(String, String)],
         params: &'a [QueryParam],
         focused: bool,
@@ -151,21 +151,28 @@ impl<'a> StatefulWidget for RequestPanel<'a> {
             Color::White
         };
 
-        let layout = Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).split(area);
-
-        // ── Tab bar ───────────────────────────────────────────────────────────
-        Tabs::new(vec!["Body", "Headers", "Auth", "Params"])
-            .select(state.tab.index())
-            .style(Style::new().fg(Color::DarkGray))
-            .highlight_style(Style::new().fg(Color::Yellow).bold())
-            .render(layout[0], buf);
+        // ── Tab title integrated into border ─────────────────────────────────
+        let tab_names = ["Body", "Headers", "Auth", "Params"];
+        let mut title_spans: Vec<Span> = Vec::new();
+        for (i, name) in tab_names.iter().enumerate() {
+            let style = if i == state.tab.index() {
+                Style::new().fg(Color::Yellow).bold()
+            } else {
+                Style::new().fg(Color::DarkGray)
+            };
+            title_spans.push(Span::styled(*name, style));
+            if i < tab_names.len() - 1 {
+                title_spans.push(Span::raw(" ─ "));
+            }
+        }
 
         // ── Content block ─────────────────────────────────────────────────────
         let block = Block::bordered()
             .border_set(ROUNDED)
-            .border_style(Style::new().fg(focus_color));
-        let inner = layout[1].inner(Margin::new(1, 1));
-        block.render(layout[1], buf);
+            .border_style(Style::new().fg(focus_color))
+            .title(Line::from(title_spans));
+        let inner = area.inner(Margin::new(1, 1));
+        block.render(area, buf);
 
         match state.tab {
             RequestTab::Body => render_body(inner, buf, self.body_input, self.focused),
@@ -178,12 +185,9 @@ impl<'a> StatefulWidget for RequestPanel<'a> {
 
 // ── Body ──────────────────────────────────────────────────────────────────────
 
-fn render_body(area: Rect, buf: &mut Buffer, input: &TextInput, focused: bool) {
+fn render_body(area: Rect, buf: &mut Buffer, input: &TextArea, focused: bool) {
     if focused {
-        // Editing mode: show TextInput with cursor
-        Paragraph::new(input.as_line(true))
-            .wrap(ratatui::widgets::Wrap { trim: false })
-            .render(area, buf);
+        Paragraph::new(input.as_text(true)).render(area, buf);
     } else if input.value.trim().is_empty() {
         Paragraph::new(Span::styled(
             "Empty body  (focus + type to edit,  y to copy)",
@@ -191,7 +195,6 @@ fn render_body(area: Rect, buf: &mut Buffer, input: &TextInput, focused: bool) {
         ))
         .render(area, buf);
     } else {
-        // Read-only: highlighted JSON (or plain text if not JSON)
         let lines = highlight::highlight_json_str(&input.value);
         Paragraph::new(Text::from(lines))
             .wrap(ratatui::widgets::Wrap { trim: false })

@@ -16,7 +16,8 @@ use crate::{
     storage,
     widgets::{
         HelpModal, HelpModalState, Modal, RequestPanel, RequestPanelState, RequestTab,
-        ResponsePanel, Sidebar, SidebarSection, SidebarState, TextInput, Toolbar, ToolbarFocus,
+        ResponsePanel, Sidebar, SidebarSection, SidebarState, TextArea, TextInput, Toolbar,
+        ToolbarFocus,
     },
 };
 
@@ -86,7 +87,7 @@ pub struct App {
     pub help_modal_state: HelpModalState,
 
     pub url_input: TextInput,
-    pub body_input: TextInput,
+    pub body_input: TextArea,
 
     pub response: Option<Result<HttpResponse, String>>,
     pub response_scroll: u16,
@@ -115,7 +116,7 @@ impl Default for App {
             request_panel_state: RequestPanelState::default(),
             help_modal_state: HelpModalState::default(),
             url_input: TextInput::default(),
-            body_input: TextInput::default(),
+            body_input: TextArea::default(),
             response: None,
             response_scroll: 0,
             is_loading: false,
@@ -198,7 +199,7 @@ impl App {
                 if let Some(req) = &item.request {
                     let cr = CurrentRequest::from(req);
                     self.url_input = TextInput::new(cr.url.clone());
-                    self.body_input = TextInput::new(cr.body.clone());
+                    self.body_input = TextArea::new(cr.body.clone());
                     // Populate auth panel state from loaded config
                     self.request_panel_state.auth_type = cr.auth.auth_type.clone();
                     self.request_panel_state.auth_username =
@@ -572,8 +573,11 @@ impl App {
                 KeyCode::Delete => self.body_input.delete_after(),
                 KeyCode::Left => self.body_input.move_left(),
                 KeyCode::Right => self.body_input.move_right(),
-                KeyCode::Home => self.body_input.move_to_start(),
-                KeyCode::End => self.body_input.move_to_end(),
+                KeyCode::Up => self.body_input.move_up(),
+                KeyCode::Down => self.body_input.move_down(),
+                KeyCode::Home => self.body_input.move_to_line_start(),
+                KeyCode::End => self.body_input.move_to_line_end(),
+                KeyCode::Enter => self.body_input.insert_newline(),
                 KeyCode::Char('y') => {
                     match crate::highlight::copy_to_clipboard(&self.body_input.value) {
                         Ok(_) => self.status = Some("Body copied to clipboard".to_string()),
