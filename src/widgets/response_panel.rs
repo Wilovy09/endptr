@@ -3,11 +3,11 @@ use ratatui::{
     layout::{Margin, Rect},
     style::{Color, Style, Stylize},
     symbols::border::ROUNDED,
-    text::{Line, Span},
-    widgets::{Block, Paragraph, ScrollbarState, Widget, Wrap},
+    text::{Line, Span, Text},
+    widgets::{Block, Paragraph, Widget, Wrap},
 };
 
-use crate::models::HttpResponse;
+use crate::{highlight, models::HttpResponse};
 
 pub struct ResponsePanel<'a> {
     pub response: Option<&'a Result<HttpResponse, String>>,
@@ -23,12 +23,7 @@ impl<'a> ResponsePanel<'a> {
         scroll: u16,
         focused: bool,
     ) -> Self {
-        Self {
-            response,
-            is_loading,
-            scroll,
-            focused,
-        }
+        Self { response, is_loading, scroll, focused }
     }
 }
 
@@ -36,12 +31,12 @@ impl<'a> Widget for ResponsePanel<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let focus_color = if self.focused { Color::Yellow } else { Color::White };
 
-        // ── Status line ───────────────────────────────────────────────────────
+        // ── Title / status line ───────────────────────────────────────────────
         let title: Line = match &self.response {
-            _ if self.is_loading => Line::from(vec![Span::styled(
+            _ if self.is_loading => Line::from(Span::styled(
                 " ⏳ Sending... ",
                 Style::new().fg(Color::Yellow),
-            )]),
+            )),
             Some(Ok(r)) => Line::from(vec![
                 Span::raw(" "),
                 Span::styled(
@@ -53,14 +48,11 @@ impl<'a> Widget for ResponsePanel<'a> {
                     Style::new().fg(Color::DarkGray),
                 ),
             ]),
-            Some(Err(e)) => Line::from(vec![Span::styled(
+            Some(Err(e)) => Line::from(Span::styled(
                 format!(" ✗ {} ", e),
                 Style::new().fg(Color::Red),
-            )]),
-            None => Line::from(Span::styled(
-                " Response ",
-                Style::new().fg(Color::DarkGray),
             )),
+            None => Line::from(Span::styled(" Response ", Style::new().fg(Color::DarkGray))),
         };
 
         let block = Block::bordered()
@@ -74,18 +66,29 @@ impl<'a> Widget for ResponsePanel<'a> {
         // ── Body ──────────────────────────────────────────────────────────────
         match &self.response {
             Some(Ok(r)) => {
-                // Try to pretty-print JSON
-                let display_body = if let Ok(v) = serde_json::from_str::<serde_json::Value>(&r.body)
-                {
-                    serde_json::to_string_pretty(&v).unwrap_or(r.body.clone())
-                } else {
-                    r.body.clone()
-                };
+                let content_height = inner.height.saturating_sub(1); // reserve hint row
+                let content_area =
+                    Rect { height: content_height, ..inner };
 
-                Paragraph::new(display_body)
+                let lines = highlight::highlight_json_str(&r.body);
+                Paragraph::new(Text::from(lines))
                     .scroll((self.scroll, 0))
-                    .wrap(Wrap { trim: false })
-                    .render(inner, buf);
+                    .render(content_area, buf);
+
+                // Hint row
+                if self.focused && inner.height >= 1 {
+                    let hint_area = Rect {
+                        x: inner.x,
+                        y: inner.y + inner.height - 1,
+                        width: inner.width,
+                        height: 1,
+                    };
+                    Paragraph::new(Span::styled(
+                        " j/k: scroll   y: copy ",
+                        Style::new().fg(Color::DarkGray),
+                    ))
+                    .render(hint_area, buf);
+                }
             }
             Some(Err(e)) => {
                 Paragraph::new(e.as_str())
@@ -95,31 +98,12 @@ impl<'a> Widget for ResponsePanel<'a> {
             }
             None if !self.is_loading => {
                 Paragraph::new(Span::styled(
-                    "Press ▶  or <Enter> in URL bar to send request",
+                    "Press ▶  or <Enter> in URL bar to send",
                     Style::new().fg(Color::DarkGray).italic(),
                 ))
                 .render(inner, buf);
             }
             _ => {}
-        }
-
-        // Scroll hint
-        if self.focused {
-            if let Some(Ok(_)) = &self.response {
-                if inner.height > 1 {
-                    let hint_area = Rect {
-                        x: inner.x,
-                        y: inner.y + inner.height - 1,
-                        width: inner.width,
-                        height: 1,
-                    };
-                    Paragraph::new(Span::styled(
-                        " j/k: scroll  h: toggle headers ",
-                        Style::new().fg(Color::DarkGray),
-                    ))
-                    .render(hint_area, buf);
-                }
-            }
         }
     }
 }

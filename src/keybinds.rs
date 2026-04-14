@@ -36,6 +36,7 @@ pub struct KeyMap {
     pub method_next: KeyBinding,
     pub method_prev: KeyBinding,
     pub new_folder: KeyBinding,
+    pub copy: KeyBinding,
 }
 
 impl KeyMap {
@@ -99,6 +100,10 @@ impl KeyMap {
                 "New folder",
                 vec![(KeyCode::Char('f'), KeyModifiers::NONE)],
             ),
+            copy: KeyBinding::new(
+                "Copy to clipboard",
+                vec![(KeyCode::Char('y'), KeyModifiers::NONE)],
+            ),
         }
     }
 
@@ -118,6 +123,7 @@ impl KeyMap {
             (self.method_next.description, self.method_next.keys.clone()),
             (self.method_prev.description, self.method_prev.keys.clone()),
             (self.new_folder.description, self.new_folder.keys.clone()),
+            (self.copy.description, self.copy.keys.clone()),
         ]
     }
 }

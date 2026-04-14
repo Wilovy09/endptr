@@ -7,6 +7,7 @@ use app::{App, AppUi};
 
 mod app;
 mod components;
+mod highlight;
 mod http_client;
 mod keybinds;
 mod models;

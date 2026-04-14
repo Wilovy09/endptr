@@ -14,3 +14,4 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0"
 srtemplate = "0.3.3"
 reqwest = { version = "0.12", features = ["blocking"] }
+arboard = "3"

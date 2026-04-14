@@ -1,4 +1,4 @@
-# endptr
+# end* (endptr)
 
 Terminal UI HTTP client. Postman-compatible, keyboard-driven.
 
@@ -61,6 +61,23 @@ Use them anywhere — URL, headers, body, params:
 Authorization: {{token}}
 ```
 
+## Syntax Highlighting
+
+JSON is highlighted automatically — in response body and in the Body tab (when not editing).
+
+| Token | Color |
+|-------|-------|
+| Keys | Cyan |
+| String values | Green |
+| Numbers | Yellow |
+| `true` / `false` | Magenta |
+| `null` | Dark gray |
+| `{ } [ ] : ,` | White |
+
+Body tab behavior:
+- **Focused** → plain editable input with cursor
+- **Not focused** → highlighted + pretty-printed (falls back to plain text if not valid JSON)
+
 ## Keybinds
 
 ### Global
@@ -115,6 +132,13 @@ Authorization: {{token}}
 |-----|--------|
 | `[` / `]` | Cycle tabs (Body → Headers → Auth → Params) |
 
+**Body tab:**
+
+| Key | Action |
+|-----|--------|
+| Type | Edit body |
+| `y` | Copy body to clipboard |
+
 **Headers / Params tabs:**
 
 | Key | Action |
@@ -138,6 +162,7 @@ Authorization: {{token}}
 | Key | Action |
 |-----|--------|
 | `j` / `k` or `↑` / `↓` | Scroll |
+| `y` | Copy response body to clipboard |
 
 ## Auth types
 

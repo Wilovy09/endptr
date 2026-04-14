@@ -1,13 +1,14 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Style},
     symbols::border::ROUNDED,
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, List, ListItem, ListState, Paragraph, StatefulWidget, Tabs, Widget},
 };
 
 use crate::{
+    highlight,
     models::{AuthType, QueryParam},
     widgets::input::TextInput,
 };
@@ -171,9 +172,24 @@ impl<'a> StatefulWidget for RequestPanel<'a> {
 // ── Body ──────────────────────────────────────────────────────────────────────
 
 fn render_body(area: Rect, buf: &mut Buffer, input: &TextInput, focused: bool) {
-    Paragraph::new(input.as_line(focused))
-        .wrap(ratatui::widgets::Wrap { trim: false })
+    if focused {
+        // Editing mode: show TextInput with cursor
+        Paragraph::new(input.as_line(true))
+            .wrap(ratatui::widgets::Wrap { trim: false })
+            .render(area, buf);
+    } else if input.value.trim().is_empty() {
+        Paragraph::new(Span::styled(
+            "Empty body  (focus + type to edit,  y to copy)",
+            Style::new().fg(Color::DarkGray).italic(),
+        ))
         .render(area, buf);
+    } else {
+        // Read-only: highlighted JSON (or plain text if not JSON)
+        let lines = highlight::highlight_json_str(&input.value);
+        Paragraph::new(Text::from(lines))
+            .wrap(ratatui::widgets::Wrap { trim: false })
+            .render(area, buf);
+    }
 }
 
 // ── Headers ───────────────────────────────────────────────────────────────────

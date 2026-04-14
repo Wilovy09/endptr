@@ -563,6 +563,12 @@ impl App {
                 KeyCode::Right => self.body_input.move_right(),
                 KeyCode::Home => self.body_input.move_to_start(),
                 KeyCode::End => self.body_input.move_to_end(),
+                KeyCode::Char('y') => {
+                    match crate::highlight::copy_to_clipboard(&self.body_input.value) {
+                        Ok(_) => self.status = Some("Body copied to clipboard".to_string()),
+                        Err(e) => self.status = Some(format!("Copy failed: {e}")),
+                    }
+                }
                 KeyCode::Char(c) => self.body_input.insert(c),
                 _ => {}
             },
@@ -675,6 +681,17 @@ impl App {
             self.response_scroll = self.response_scroll.saturating_add(1);
         } else if km.up.matches(&key) {
             self.response_scroll = self.response_scroll.saturating_sub(1);
+        } else if km.copy.matches(&key) {
+            let text = match &self.response {
+                Some(Ok(r)) => Some(r.body.clone()),
+                _ => None,
+            };
+            if let Some(body) = text {
+                match crate::highlight::copy_to_clipboard(&body) {
+                    Ok(_) => self.status = Some("Response copied to clipboard".to_string()),
+                    Err(e) => self.status = Some(format!("Copy failed: {e}")),
+                }
+            }
         }
     }
 
