@@ -236,12 +236,21 @@ fn push_items(
 
 pub struct Sidebar<'a> {
     pub secrets: &'a Secrets,
+    pub workflows: &'a [(PathBuf, Workflow)],
     pub focused: bool,
 }
 
 impl<'a> Sidebar<'a> {
-    pub fn new(secrets: &'a Secrets, focused: bool) -> Self {
-        Self { secrets, focused }
+    pub fn new(
+        secrets: &'a Secrets,
+        workflows: &'a [(PathBuf, Workflow)],
+        focused: bool,
+    ) -> Self {
+        Self {
+            secrets,
+            workflows,
+            focused,
+        }
     }
 }
 
@@ -253,30 +262,35 @@ impl<'a> StatefulWidget for Sidebar<'a> {
 
         // ── Tab bar ───────────────────────────────────────────────────────────
         {
-            let tabs = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-                .split(layout[0].inner(Margin::new(1, 1)));
+            let tabs = Layout::horizontal([
+                Constraint::Percentage(34),
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+            ])
+            .split(layout[0].inner(Margin::new(1, 1)));
 
             Block::bordered().border_set(ROUNDED).render(layout[0], buf);
 
-            let req_style = if state.section == SidebarSection::Requests {
-                Style::new().fg(Color::Yellow).bold()
-            } else {
-                Style::new().fg(Color::DarkGray)
-            };
-            let sec_style = if state.section == SidebarSection::Secrets {
-                Style::new().fg(Color::Yellow).bold()
-            } else {
-                Style::new().fg(Color::DarkGray)
+            let tab_style = |active: bool| {
+                if active {
+                    Style::new().fg(Color::Yellow).bold()
+                } else {
+                    Style::new().fg(Color::DarkGray)
+                }
             };
 
             Paragraph::new("Requests")
                 .centered()
-                .style(req_style)
+                .style(tab_style(state.section == SidebarSection::Requests))
                 .render(tabs[0], buf);
             Paragraph::new("Secrets")
                 .centered()
-                .style(sec_style)
+                .style(tab_style(state.section == SidebarSection::Secrets))
                 .render(tabs[1], buf);
+            Paragraph::new("Workflows")
+                .centered()
+                .style(tab_style(state.section == SidebarSection::Workflows))
+                .render(tabs[2], buf);
         }
 
         // ── Content ───────────────────────────────────────────────────────────
@@ -362,6 +376,29 @@ impl<'a> StatefulWidget for Sidebar<'a> {
                     .highlight_style(Style::new().bg(Color::DarkGray));
 
                 StatefulWidget::render(list, layout[1], buf, &mut state.secret_list);
+            }
+
+            SidebarSection::Workflows => {
+                let items: Vec<ListItem> = self
+                    .workflows
+                    .iter()
+                    .map(|(_, wf)| {
+                        ListItem::new(Line::from(vec![
+                            Span::styled("▶ ", Style::new().fg(Color::Magenta)),
+                            Span::styled(wf.name.clone(), Style::new().fg(Color::White)),
+                            Span::styled(
+                                format!("  ({} steps)", wf.steps.len()),
+                                Style::new().fg(Color::DarkGray),
+                            ),
+                        ]))
+                    })
+                    .collect();
+
+                let list = List::new(items)
+                    .block(block)
+                    .highlight_style(Style::new().bg(Color::DarkGray));
+
+                StatefulWidget::render(list, layout[1], buf, &mut state.workflow_list);
             }
         }
     }

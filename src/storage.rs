@@ -87,6 +87,54 @@ pub fn delete_collection(path: &Path) -> std::io::Result<()> {
     fs::remove_file(path)
 }
 
+// ── Workflows ─────────────────────────────────────────────────────────────────
+
+pub fn workflows_dir() -> PathBuf {
+    endptr_dir().join("workflows")
+}
+
+fn ensure_workflows_dir() -> std::io::Result<()> {
+    fs::create_dir_all(workflows_dir())
+}
+
+/// Load every `*.yaml` file in `.endptr/workflows/`.
+/// Returns `(path, workflow)` pairs sorted by filename.
+pub fn load_all_workflows() -> Vec<(PathBuf, Workflow)> {
+    let dir = workflows_dir();
+    if !dir.exists() {
+        return vec![];
+    }
+
+    let mut result: Vec<(PathBuf, Workflow)> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            if path.extension()?.to_str()? != "yaml" {
+                return None;
+            }
+            let content = fs::read_to_string(&path).ok()?;
+            let wf: Workflow = serde_yaml::from_str(&content).ok()?;
+            Some((path, wf))
+        })
+        .collect();
+
+    result.sort_by(|(a, _), (b, _)| a.cmp(b));
+    result
+}
+
+pub fn save_workflow(path: &Path, workflow: &Workflow) -> std::io::Result<()> {
+    let _ = ensure_workflows_dir();
+    let yaml = serde_yaml::to_string(workflow)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    fs::write(path, yaml)
+}
+
+pub fn delete_workflow(path: &Path) -> std::io::Result<()> {
+    fs::remove_file(path)
+}
+
 // ── Secrets ───────────────────────────────────────────────────────────────────
 
 pub fn load_secrets() -> Secrets {

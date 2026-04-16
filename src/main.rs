@@ -13,6 +13,7 @@ mod keybinds;
 mod models;
 mod storage;
 mod widgets;
+mod workflow;
 
 fn main() -> std::io::Result<()> {
     let terminal = ratatui::init();
@@ -26,8 +27,9 @@ fn run(mut terminal: DefaultTerminal) -> std::io::Result<()> {
     let keymap = keybinds::KeyMap::new();
 
     loop {
-        // Poll HTTP before drawing so response is shown immediately
+        // Poll async operations before drawing
         state.poll_http();
+        state.poll_workflow();
 
         terminal.draw(|frame| {
             frame.render_stateful_widget(AppUi::new(&keymap), frame.area(), &mut state);

@@ -12,13 +12,14 @@ use ratatui::{
 use crate::{
     http_client,
     keybinds::KeyMap,
-    models::{CurrentRequest, HttpResponse, ItemPath, PostmanCollection, Secrets, resolve_path},
+    models::{CurrentRequest, HttpResponse, ItemPath, OcCollection, OcItem, Secrets, resolve_path},
     storage,
     widgets::{
         HelpModal, HelpModalState, Modal, RequestPanel, RequestPanelState, RequestTab,
         ResponsePanel, Sidebar, SidebarSection, SidebarState, TextArea, TextInput, Toolbar,
         ToolbarFocus,
     },
+    workflow::{self, StepResult, Workflow},
 };
 
 // ── Focus ─────────────────────────────────────────────────────────────────────
@@ -79,9 +80,14 @@ pub struct App {
     pub focus: AppFocus,
 
     /// All loaded collection files: (path, collection)
-    pub collections: Vec<(PathBuf, PostmanCollection)>,
+    pub collections: Vec<(PathBuf, OcCollection)>,
     pub secrets: Secrets,
     pub current: CurrentRequest,
+
+    /// All loaded workflow files: (path, workflow)
+    pub workflows: Vec<(PathBuf, Workflow)>,
+    /// Channel for receiving workflow run results
+    pub workflow_rx: Option<Receiver<(String, Vec<StepResult>)>>,
 
     pub sidebar_state: SidebarState,
     pub request_panel_state: RequestPanelState,
@@ -104,6 +110,7 @@ impl Default for App {
     fn default() -> Self {
         let collections = storage::load_all_collections();
         let secrets = storage::load_secrets();
+        let workflows = storage::load_all_workflows();
 
         let mut sidebar_state = SidebarState::default();
         sidebar_state.rebuild(&collections);
@@ -113,6 +120,8 @@ impl Default for App {
             collections,
             secrets,
             current: CurrentRequest::default(),
+            workflows,
+            workflow_rx: None,
             sidebar_state,
             request_panel_state: RequestPanelState::default(),
             help_modal_state: HelpModalState::default(),
@@ -137,6 +146,42 @@ impl App {
                 self.is_loading = false;
                 self.http_rx = None;
                 self.focus = AppFocus::Response;
+            }
+        }
+    }
+
+    pub fn poll_workflow(&mut self) {
+        if let Some(rx) = &self.workflow_rx {
+            if let Ok((wf_name, results)) = rx.try_recv() {
+                let passed = results.iter().filter(|r| r.is_ok()).count();
+                let total = results.len();
+                self.status = Some(format!("Workflow done: {passed}/{total} steps OK"));
+                self.workflow_rx = None;
+                self.open_modal(
+                    Modal::WorkflowResults {
+                        workflow_name: wf_name,
+                        results,
+                        scroll: 0,
+                    },
+                    ModalContext::RequestInfo, // reuse a neutral ctx
+                );
+            }
+        }
+    }
+
+    pub fn run_selected_workflow(&mut self) {
+        if let Some(idx) = self.sidebar_state.workflow_list.selected() {
+            if let Some((_, wf)) = self.workflows.get(idx) {
+                let wf = wf.clone();
+                let secrets = self.secrets.clone();
+                let collections = self.collections.clone();
+                let (tx, rx) = std::sync::mpsc::channel();
+                self.workflow_rx = Some(rx);
+                self.status = Some(format!("Running workflow: {}…", wf.name));
+                std::thread::spawn(move || {
+                    let results = workflow::run_workflow(&wf, &secrets, &collections);
+                    let _ = tx.send((wf.name.clone(), results));
+                });
             }
         }
     }
@@ -568,6 +613,18 @@ impl App {
                     self.sidebar_state.toggle_section();
                 }
             }
+            SidebarSection::Workflows => {
+                let max = self.workflows.len();
+                if km.down.matches(&key) {
+                    self.sidebar_state.next_workflow(max);
+                } else if km.up.matches(&key) {
+                    self.sidebar_state.prev_workflow(max);
+                } else if km.confirm.matches(&key) {
+                    self.run_selected_workflow();
+                } else if km.toggle_section.matches(&key) {
+                    self.sidebar_state.toggle_section();
+                }
+            }
         }
     }
 
@@ -929,6 +986,39 @@ impl App {
                         description,
                         secrets_used,
                         show_secrets,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                }
+            }
+
+            Modal::WorkflowResults {
+                workflow_name,
+                results,
+                mut scroll,
+            } => {
+                if km.cancel.matches(&key) {
+                    // close
+                } else if km.down.matches(&key) || key.code == KeyCode::Char('j') {
+                    scroll = scroll.saturating_add(1);
+                    self.modal = Some(Modal::WorkflowResults {
+                        workflow_name,
+                        results,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                } else if km.up.matches(&key) || key.code == KeyCode::Char('k') {
+                    scroll = scroll.saturating_sub(1);
+                    self.modal = Some(Modal::WorkflowResults {
+                        workflow_name,
+                        results,
+                        scroll,
+                    });
+                    self.modal_ctx = ctx;
+                } else {
+                    self.modal = Some(Modal::WorkflowResults {
+                        workflow_name,
+                        results,
                         scroll,
                     });
                     self.modal_ctx = ctx;
