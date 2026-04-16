@@ -3,14 +3,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::models::{PostmanCollection, Secrets};
+use crate::{
+    models::{OcCollection, Secrets},
+    workflow::Workflow,
+};
 
 pub fn endptr_dir() -> PathBuf {
     PathBuf::from(".endptr")
 }
 
 fn secrets_path() -> PathBuf {
-    endptr_dir().join("secrets.json")
+    endptr_dir().join("secrets.yaml")
 }
 
 fn ensure_dir() -> std::io::Result<()> {
@@ -19,36 +22,36 @@ fn ensure_dir() -> std::io::Result<()> {
 
 // ── Collections ───────────────────────────────────────────────────────────────
 
-/// Load every `*.json` file in `.endptr/` (excluding `secrets.json`).
+/// Load every `*.yaml` file in `.endptr/` (excluding `secrets.yaml`).
 /// Returns `(path, collection)` pairs sorted by filename.
-pub fn load_all_collections() -> Vec<(PathBuf, PostmanCollection)> {
+pub fn load_all_collections() -> Vec<(PathBuf, OcCollection)> {
     let _ = ensure_dir();
     let dir = endptr_dir();
 
-    let mut result: Vec<(PathBuf, PostmanCollection)> = fs::read_dir(&dir)
+    let mut result: Vec<(PathBuf, OcCollection)> = fs::read_dir(&dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter_map(|entry| {
             let path = entry.path();
-            if path.extension()?.to_str()? != "json" {
+            if path.extension()?.to_str()? != "yaml" {
                 return None;
             }
-            if path.file_name()?.to_str()? == "secrets.json" {
+            if path.file_name()?.to_str()? == "secrets.yaml" {
                 return None;
             }
             let content = fs::read_to_string(&path).ok()?;
-            let col: PostmanCollection = serde_json::from_str(&content).ok()?;
+            let col: OcCollection = serde_yaml::from_str(&content).ok()?;
             Some((path, col))
         })
         .collect();
 
     result.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-    // Bootstrap: if nothing exists, create default collection.json
+    // Bootstrap: if nothing exists, create default collection.yaml
     if result.is_empty() {
-        let default_path = dir.join("collection.json");
-        let col = PostmanCollection::default();
+        let default_path = dir.join("collection.yaml");
+        let col = OcCollection::default();
         let _ = save_collection(&default_path, &col);
         result.push((default_path, col));
     }
@@ -56,17 +59,16 @@ pub fn load_all_collections() -> Vec<(PathBuf, PostmanCollection)> {
     result
 }
 
-pub fn save_collection(path: &Path, collection: &PostmanCollection) -> std::io::Result<()> {
+pub fn save_collection(path: &Path, collection: &OcCollection) -> std::io::Result<()> {
     let _ = ensure_dir();
-    let json = serde_json::to_string_pretty(collection)
+    let yaml = serde_yaml::to_string(collection)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    fs::write(path, json)
+    fs::write(path, yaml)
 }
 
 /// Create a new collection file. Returns its path.
-pub fn create_collection(name: &str) -> std::io::Result<(PathBuf, PostmanCollection)> {
+pub fn create_collection(name: &str) -> std::io::Result<(PathBuf, OcCollection)> {
     let _ = ensure_dir();
-    // Sanitize filename
     let filename = name
         .chars()
         .map(|c| {
@@ -77,8 +79,8 @@ pub fn create_collection(name: &str) -> std::io::Result<(PathBuf, PostmanCollect
             }
         })
         .collect::<String>();
-    let path = endptr_dir().join(format!("{filename}.json"));
-    let col = PostmanCollection::new(name);
+    let path = endptr_dir().join(format!("{filename}.yaml"));
+    let col = OcCollection::new(name);
     save_collection(&path, &col)?;
     Ok((path, col))
 }
@@ -143,7 +145,7 @@ pub fn load_secrets() -> Secrets {
     if path.exists() {
         fs::read_to_string(&path)
             .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
+            .and_then(|s| serde_yaml::from_str(&s).ok())
             .unwrap_or_default()
     } else {
         Secrets::default()
@@ -152,7 +154,7 @@ pub fn load_secrets() -> Secrets {
 
 pub fn save_secrets(secrets: &Secrets) -> std::io::Result<()> {
     let _ = ensure_dir();
-    let json = serde_json::to_string_pretty(secrets)
+    let yaml = serde_yaml::to_string(secrets)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    fs::write(secrets_path(), json)
+    fs::write(secrets_path(), yaml)
 }

@@ -241,25 +241,22 @@ impl App {
         let item_path = node.item_path.clone();
 
         if let Some((_, col)) = self.collections.get(col_idx) {
-            if let Some(item) = resolve_path(&col.item, &item_path) {
-                if let Some(req) = &item.request {
-                    let cr = CurrentRequest::from(req);
-                    self.url_input = TextInput::new(cr.url.clone());
-                    self.body_input = TextArea::new(cr.body.clone());
-                    // Populate auth panel state from loaded config
-                    self.request_panel_state.auth_type = cr.auth.auth_type.clone();
-                    self.request_panel_state.auth_username =
-                        TextInput::new(cr.auth.username.clone());
-                    self.request_panel_state.auth_password =
-                        TextInput::new(cr.auth.password.clone());
-                    self.request_panel_state.auth_token = TextInput::new(cr.auth.token.clone());
-                    self.request_panel_state.auth_field = 0;
-                    self.current = cr;
-                    self.response = None;
-                    self.response_scroll = 0;
-                    self.focus = AppFocus::Url;
-                    self.status = Some(format!("Loaded: {}", item.name));
-                }
+            if let Some(OcItem::Request(req)) = resolve_path(&col.items, &item_path) {
+                let cr = CurrentRequest::from(&req.http);
+                self.url_input = TextInput::new(cr.url.clone());
+                self.body_input = TextArea::new(cr.body.clone());
+                self.request_panel_state.auth_type = cr.auth.auth_type.clone();
+                self.request_panel_state.auth_username =
+                    TextInput::new(cr.auth.username.clone());
+                self.request_panel_state.auth_password =
+                    TextInput::new(cr.auth.password.clone());
+                self.request_panel_state.auth_token = TextInput::new(cr.auth.token.clone());
+                self.request_panel_state.auth_field = 0;
+                self.current = cr;
+                self.response = None;
+                self.response_scroll = 0;
+                self.focus = AppFocus::Url;
+                self.status = Some(format!("Loaded: {}", req.info.name));
             }
         }
     }
@@ -280,6 +277,19 @@ impl App {
                 password: self.request_panel_state.auth_password.value.clone(),
                 token: self.request_panel_state.auth_token.value.clone(),
             };
+            // Use existing seq if updating, or next seq if new
+            let existing_seq = col.items.iter().find_map(|i| {
+                if let OcItem::Request(r) = i {
+                    if r.info.name == name { Some(r.info.seq) } else { None }
+                } else {
+                    None
+                }
+            });
+            let seq = existing_seq.unwrap_or_else(|| {
+                col.items.iter().filter_map(|i| {
+                    if let OcItem::Request(r) = i { Some(r.info.seq) } else { None }
+                }).max().unwrap_or(0) + 1
+            });
             let mut item = CurrentRequest {
                 method: self.current.method.clone(),
                 url: self.url_input.value.clone(),
@@ -288,19 +298,25 @@ impl App {
                 auth,
                 params: self.current.params.clone(),
             }
-            .to_postman_item(&name);
+            .to_oc_request(&name, seq);
 
             // Preserve existing description if none provided
-            if description.is_some() {
-                item.description = description;
-            } else if let Some(existing) = col.item.iter().find(|i| i.name == name) {
-                item.description = existing.description.clone();
+            if let OcItem::Request(ref mut req) = item {
+                if description.is_some() {
+                    req.description = description;
+                } else if let Some(OcItem::Request(existing)) =
+                    col.items.iter().find(|i| matches!(i, OcItem::Request(r) if r.info.name == name))
+                {
+                    req.description = existing.description.clone();
+                }
             }
 
-            if let Some(existing) = col.item.iter_mut().find(|i| i.name == name) {
+            if let Some(existing) = col.items.iter_mut().find(|i| {
+                matches!(i, OcItem::Request(r) if r.info.name == name)
+            }) {
                 *existing = item;
             } else {
-                col.item.push(item);
+                col.items.push(item);
             }
         }
         self.save_collection_at(col_idx);
@@ -316,7 +332,7 @@ impl App {
             .unwrap_or(0);
 
         if let Some((_, col)) = self.collections.get_mut(col_idx) {
-            col.item.push(crate::models::PostmanItem::new_folder(&name));
+            col.items.push(OcItem::new_folder(&name));
         }
         self.save_collection_at(col_idx);
         self.rebuild_sidebar();
@@ -345,11 +361,13 @@ impl App {
 
                 if let Some((_, col)) = self.collections.get_mut(col_idx) {
                     if let Some((last_idx, parent_path)) = item_path.split_last() {
-                        let parent = if parent_path.is_empty() {
-                            Some(&mut col.item)
+                        let parent: Option<&mut Vec<OcItem>> = if parent_path.is_empty() {
+                            Some(&mut col.items)
                         } else {
-                            crate::models::resolve_path_mut(&mut col.item, parent_path)
-                                .and_then(|p| p.item.as_mut())
+                            match crate::models::resolve_path_mut(&mut col.items, parent_path) {
+                                Some(OcItem::Folder(f)) => Some(&mut f.items),
+                                _ => None,
+                            }
                         };
                         if let Some(list) = parent {
                             list.remove(*last_idx);
@@ -474,18 +492,15 @@ impl App {
                     if let Some(node) = node {
                         if node.is_request() {
                             if let Some((_, col)) = self.collections.get(node.col_idx) {
-                                if let Some(item) =
-                                    resolve_path(&col.item, &node.item_path)
+                                if let Some(OcItem::Request(req)) =
+                                    resolve_path(&col.items, &node.item_path)
                                 {
-                                    let description = item
+                                    let description = req
                                         .description
                                         .clone()
                                         .unwrap_or_default();
-                                    let secrets_used = item
-                                        .request
-                                        .as_ref()
-                                        .map(|r| extract_secrets_used(r, &self.secrets))
-                                        .unwrap_or_default();
+                                    let secrets_used =
+                                        extract_secrets_used(&req.http, &self.secrets);
                                     self.open_modal(
                                         Modal::RequestInfo {
                                             description,
@@ -1051,43 +1066,31 @@ fn template_keys(text: &str) -> Vec<String> {
 
 /// Collect all secrets referenced by a request (URL, headers, body, auth).
 fn extract_secrets_used(
-    req: &crate::models::PostmanRequest,
+    http: &crate::models::OcHttp,
     secrets: &crate::models::Secrets,
 ) -> Vec<(String, String)> {
     let mut found = std::collections::HashSet::new();
 
-    // URL
-    for k in template_keys(&req.url.raw) {
+    for k in template_keys(&http.url) {
         found.insert(k);
     }
-    // Headers
-    for h in &req.header {
+    for h in http.headers.as_deref().unwrap_or(&[]) {
         for k in template_keys(&h.value) {
             found.insert(k);
         }
     }
-    // Body
-    if let Some(body) = &req.body {
-        if let Some(raw) = &body.raw {
-            for k in template_keys(raw) {
-                found.insert(k);
-            }
+    if let Some(body) = &http.body {
+        for k in template_keys(&body.data) {
+            found.insert(k);
         }
     }
-    // Auth fields
-    if let Some(auth) = &req.auth {
-        if let Some(fields) = &auth.basic {
-            for f in fields {
-                for k in template_keys(&f.value) {
-                    found.insert(k);
-                }
-            }
-        }
-        if let Some(fields) = &auth.bearer {
-            for f in fields {
-                for k in template_keys(&f.value) {
-                    found.insert(k);
-                }
+    if let Some(crate::models::OcAuth::Config(auth)) = &http.auth {
+        for field in [auth.token.as_deref(), auth.username.as_deref(), auth.password.as_deref()]
+            .into_iter()
+            .flatten()
+        {
+            for k in template_keys(field) {
+                found.insert(k);
             }
         }
     }
@@ -1147,7 +1150,7 @@ impl<'a> StatefulWidget for AppUi<'a> {
             .split(area);
 
         // Sidebar
-        Sidebar::new(&state.secrets, state.focus == AppFocus::Sidebar).render(
+        Sidebar::new(&state.secrets, &state.workflows, state.focus == AppFocus::Sidebar).render(
             root[0],
             buf,
             &mut state.sidebar_state,

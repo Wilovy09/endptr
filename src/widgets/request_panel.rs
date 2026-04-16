@@ -78,7 +78,7 @@ impl RequestPanelState {
     pub fn auth_field_count(&self) -> u8 {
         match self.auth_type {
             AuthType::None => 0,
-            AuthType::BasicAuth => 2,
+            AuthType::Basic => 2,
             _ => 1,
         }
     }
@@ -108,8 +108,8 @@ impl RequestPanelState {
     /// Active TextInput for the current auth field (1 or 2).
     pub fn active_auth_input(&mut self) -> Option<&mut TextInput> {
         match (&self.auth_type, self.auth_field) {
-            (AuthType::BasicAuth, 1) => Some(&mut self.auth_username),
-            (AuthType::BasicAuth, 2) => Some(&mut self.auth_password),
+            (AuthType::Basic, 1) => Some(&mut self.auth_username),
+            (AuthType::Basic, 2) => Some(&mut self.auth_password),
             (AuthType::Bearer | AuthType::OAuth2 | AuthType::JWT, 1) => Some(&mut self.auth_token),
             _ => None,
         }
@@ -299,7 +299,7 @@ fn render_auth(area: Rect, buf: &mut Buffer, focused: bool, state: &mut RequestP
             .render(rows[2], buf);
         }
 
-        AuthType::BasicAuth => {
+        AuthType::Basic => {
             // Username
             let user_focused = focused && state.auth_field == 1;
             Paragraph::new(Span::styled("Username:", Style::new().fg(Color::Gray)))

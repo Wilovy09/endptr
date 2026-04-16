@@ -88,10 +88,11 @@ impl std::fmt::Display for HttpMethod {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthType {
     #[default]
     None,
-    BasicAuth,
+    Basic,
     Bearer,
     OAuth2,
     JWT,
@@ -101,7 +102,7 @@ impl AuthType {
     pub fn label(&self) -> &str {
         match self {
             AuthType::None => "None",
-            AuthType::BasicAuth => "Basic Auth",
+            AuthType::Basic => "Basic Auth",
             AuthType::Bearer => "Bearer",
             AuthType::OAuth2 => "OAuth 2.0",
             AuthType::JWT => "JWT",
@@ -111,7 +112,7 @@ impl AuthType {
     pub fn all() -> [AuthType; 5] {
         [
             AuthType::None,
-            AuthType::BasicAuth,
+            AuthType::Basic,
             AuthType::Bearer,
             AuthType::OAuth2,
             AuthType::JWT,
@@ -129,16 +130,6 @@ impl AuthType {
         let idx = all.iter().position(|a| a == self).unwrap_or(0);
         all[(idx + all.len() - 1) % all.len()].clone()
     }
-
-    /// Does this type need a username + password pair?
-    pub fn needs_user_pass(&self) -> bool {
-        matches!(self, AuthType::BasicAuth)
-    }
-
-    /// Does this type need a single token field?
-    pub fn needs_token(&self) -> bool {
-        matches!(self, AuthType::Bearer | AuthType::OAuth2 | AuthType::JWT)
-    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -150,12 +141,10 @@ pub struct AuthConfig {
 }
 
 impl AuthConfig {
-    /// Build the `Authorization` header value if configured.
     pub fn to_auth_header(&self) -> Option<(String, String)> {
         match &self.auth_type {
             AuthType::None => None,
-            AuthType::BasicAuth => {
-                // Manual base64 — avoids extra dependency.
+            AuthType::Basic => {
                 let raw = format!("{}:{}", self.username, self.password);
                 let encoded = base64_encode(raw.as_bytes());
                 Some(("Authorization".into(), format!("Basic {encoded}")))
@@ -177,17 +166,9 @@ fn base64_encode(input: &[u8]) -> String {
     let mut out = String::new();
     for chunk in input.chunks(3) {
         let b0 = chunk[0] as usize;
-        let b1 = if chunk.len() > 1 {
-            chunk[1] as usize
-        } else {
-            0
-        };
-        let b2 = if chunk.len() > 2 {
-            chunk[2] as usize
-        } else {
-            0
-        };
-        out.push(CHARS[(b0 >> 2)] as char);
+        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
+        out.push(CHARS[b0 >> 2] as char);
         out.push(CHARS[((b0 & 3) << 4) | (b1 >> 4)] as char);
         if chunk.len() > 1 {
             out.push(CHARS[((b1 & 0xf) << 2) | (b2 >> 6)] as char);
@@ -222,209 +203,134 @@ impl QueryParam {
     }
 }
 
-// ── Postman Collection v2.1 ───────────────────────────────────────────────────
+// ── OpenCollection ────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostmanCollection {
-    pub info: PostmanInfo,
-    pub item: Vec<PostmanItem>,
+pub struct OcCollection {
+    pub name: String,
+    #[serde(default)]
+    pub items: Vec<OcItem>,
 }
 
-impl PostmanCollection {
+impl OcCollection {
     pub fn new(name: &str) -> Self {
         Self {
-            info: PostmanInfo {
-                name: name.to_string(),
-                schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-                    .to_string(),
-            },
-            item: vec![],
+            name: name.to_string(),
+            items: vec![],
         }
     }
 }
 
-impl Default for PostmanCollection {
+impl Default for OcCollection {
     fn default() -> Self {
         Self::new("endptr")
     }
 }
 
+/// A collection item: either a request or a folder.
+/// Uses untagged deserialization: request has `info` + `http`; folder has `name` + `items`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostmanInfo {
-    pub name: String,
-    pub schema: String,
+#[serde(untagged)]
+pub enum OcItem {
+    Request(OcRequest),
+    Folder(OcFolder),
+}
+
+impl OcItem {
+    pub fn new_folder(name: &str) -> Self {
+        OcItem::Folder(OcFolder {
+            name: name.to_string(),
+            description: None,
+            items: vec![],
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostmanItem {
+pub struct OcRequest {
+    pub info: OcInfo,
+    pub http: OcHttp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcFolder {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request: Option<PostmanRequest>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub item: Option<Vec<PostmanItem>>,
-}
-
-impl PostmanItem {
-    pub fn is_folder(&self) -> bool {
-        self.item.is_some()
-    }
-
-    pub fn is_request(&self) -> bool {
-        self.request.is_some()
-    }
-
-    pub fn new_request(name: &str, request: PostmanRequest) -> Self {
-        Self {
-            name: name.to_string(),
-            description: None,
-            request: Some(request),
-            item: None,
-        }
-    }
-
-    pub fn new_folder(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            description: None,
-            request: None,
-            item: Some(vec![]),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PostmanRequest {
-    pub method: String,
-    pub url: PostmanUrl,
-    pub header: Vec<PostmanHeader>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<PostmanBody>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub auth: Option<PostmanAuth>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PostmanUrl {
-    pub raw: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub query: Option<Vec<PostmanQueryParam>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PostmanQueryParam {
-    pub key: String,
-    pub value: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PostmanHeader {
-    pub key: String,
-    pub value: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PostmanBody {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw: Option<String>,
-}
-
-/// Postman auth object (Postman collection v2.1).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PostmanAuth {
-    #[serde(rename = "type")]
-    pub auth_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub basic: Option<Vec<PostmanAuthField>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bearer: Option<Vec<PostmanAuthField>>,
+    pub items: Vec<OcItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostmanAuthField {
-    pub key: String,
-    pub value: String,
+pub struct OcInfo {
+    pub name: String,
     #[serde(rename = "type")]
-    pub field_type: String,
+    pub item_type: String,
+    pub seq: u32,
 }
 
-impl PostmanAuth {
-    pub fn from_config(config: &AuthConfig) -> Option<PostmanAuth> {
-        match &config.auth_type {
-            AuthType::None => None,
-            AuthType::BasicAuth => Some(PostmanAuth {
-                auth_type: "basic".into(),
-                basic: Some(vec![
-                    PostmanAuthField {
-                        key: "username".into(),
-                        value: config.username.clone(),
-                        field_type: "string".into(),
-                    },
-                    PostmanAuthField {
-                        key: "password".into(),
-                        value: config.password.clone(),
-                        field_type: "string".into(),
-                    },
-                ]),
-                bearer: None,
-            }),
-            AuthType::Bearer | AuthType::OAuth2 | AuthType::JWT => Some(PostmanAuth {
-                auth_type: "bearer".into(),
-                bearer: Some(vec![PostmanAuthField {
-                    key: "token".into(),
-                    value: config.token.clone(),
-                    field_type: "string".into(),
-                }]),
-                basic: None,
-            }),
-        }
-    }
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OcHttp {
+    pub method: String,
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<Vec<OcHeader>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<Vec<OcParam>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<OcBody>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<OcAuth>,
+}
 
-    pub fn to_config(&self) -> AuthConfig {
-        match self.auth_type.as_str() {
-            "basic" => {
-                let fields = self.basic.as_deref().unwrap_or(&[]);
-                let username = fields
-                    .iter()
-                    .find(|f| f.key == "username")
-                    .map(|f| f.value.clone())
-                    .unwrap_or_default();
-                let password = fields
-                    .iter()
-                    .find(|f| f.key == "password")
-                    .map(|f| f.value.clone())
-                    .unwrap_or_default();
-                AuthConfig {
-                    auth_type: AuthType::BasicAuth,
-                    username,
-                    password,
-                    token: String::new(),
-                }
-            }
-            "bearer" => {
-                let token = self
-                    .bearer
-                    .as_deref()
-                    .unwrap_or(&[])
-                    .iter()
-                    .find(|f| f.key == "token")
-                    .map(|f| f.value.clone())
-                    .unwrap_or_default();
-                AuthConfig {
-                    auth_type: AuthType::Bearer,
-                    token,
-                    username: String::new(),
-                    password: String::new(),
-                }
-            }
-            _ => AuthConfig::default(),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcHeader {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcParam {
+    pub key: String,
+    pub value: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcBody {
+    #[serde(rename = "type")]
+    pub body_type: String,
+    pub data: String,
+}
+
+/// Auth value: either the string `"inherit"` or a concrete auth config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum OcAuth {
+    Inherit(String),
+    Config(OcAuthConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcAuthConfig {
+    #[serde(rename = "type")]
+    pub auth_type: AuthType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+}
+
+impl OcAuthConfig {
+    pub fn to_auth_config(&self) -> AuthConfig {
+        AuthConfig {
+            auth_type: self.auth_type.clone(),
+            username: self.username.clone().unwrap_or_default(),
+            password: self.password.clone().unwrap_or_default(),
+            token: self.token.clone().unwrap_or_default(),
         }
     }
 }
@@ -442,85 +348,114 @@ pub struct CurrentRequest {
 }
 
 impl CurrentRequest {
-    pub fn to_postman_item(&self, name: &str) -> PostmanItem {
-        let query: Option<Vec<PostmanQueryParam>> = if self.params.is_empty() {
+    pub fn to_oc_request(&self, name: &str, seq: u32) -> OcItem {
+        let headers = if self.headers.is_empty() {
             None
         } else {
             Some(
-                self.params
+                self.headers
                     .iter()
-                    .map(|p| PostmanQueryParam {
-                        key: p.key.clone(),
-                        value: p.value.clone(),
-                        disabled: if p.enabled { None } else { Some(true) },
+                    .map(|(k, v)| OcHeader {
+                        key: k.clone(),
+                        value: v.clone(),
                     })
                     .collect(),
             )
         };
 
-        PostmanItem::new_request(
-            name,
-            PostmanRequest {
-                method: self.method.as_str().to_string(),
-                url: PostmanUrl {
-                    raw: self.url.clone(),
-                    query,
-                },
-                header: self
-                    .headers
+        let params = if self.params.is_empty() {
+            None
+        } else {
+            Some(
+                self.params
                     .iter()
-                    .map(|(k, v)| PostmanHeader {
-                        key: k.clone(),
-                        value: v.clone(),
-                        disabled: None,
+                    .map(|p| OcParam {
+                        key: p.key.clone(),
+                        value: p.value.clone(),
+                        enabled: p.enabled,
                     })
                     .collect(),
-                body: if self.body.is_empty() {
-                    None
-                } else {
-                    Some(PostmanBody {
-                        mode: Some("raw".to_string()),
-                        raw: Some(self.body.clone()),
-                    })
-                },
-                auth: PostmanAuth::from_config(&self.auth),
+            )
+        };
+
+        let body = if self.body.is_empty() {
+            None
+        } else {
+            Some(OcBody {
+                body_type: "json".to_string(),
+                data: self.body.clone(),
+            })
+        };
+
+        let auth = match self.auth.auth_type {
+            AuthType::None => None,
+            AuthType::Basic => Some(OcAuth::Config(OcAuthConfig {
+                auth_type: AuthType::Basic,
+                username: Some(self.auth.username.clone()),
+                password: Some(self.auth.password.clone()),
+                token: None,
+            })),
+            ref t => Some(OcAuth::Config(OcAuthConfig {
+                auth_type: t.clone(),
+                username: None,
+                password: None,
+                token: Some(self.auth.token.clone()),
+            })),
+        };
+
+        OcItem::Request(OcRequest {
+            info: OcInfo {
+                name: name.to_string(),
+                item_type: "http".to_string(),
+                seq,
             },
-        )
+            http: OcHttp {
+                method: self.method.as_str().to_string(),
+                url: self.url.clone(),
+                headers,
+                params,
+                body,
+                auth,
+            },
+            description: None,
+        })
     }
 }
 
-impl From<&PostmanRequest> for CurrentRequest {
-    fn from(req: &PostmanRequest) -> Self {
-        let params: Vec<QueryParam> = req
-            .url
-            .query
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .map(|q| QueryParam {
-                key: q.key.clone(),
-                value: q.value.clone(),
-                enabled: q.disabled.map(|d| !d).unwrap_or(true),
-            })
-            .collect();
-
-        let auth = req.auth.as_ref().map(|a| a.to_config()).unwrap_or_default();
+impl From<&OcHttp> for CurrentRequest {
+    fn from(http: &OcHttp) -> Self {
+        let auth = match &http.auth {
+            Some(OcAuth::Config(c)) => c.to_auth_config(),
+            _ => AuthConfig::default(),
+        };
 
         Self {
-            method: HttpMethod::from_str(&req.method),
-            url: req.url.raw.clone(),
-            headers: req
-                .header
+            method: HttpMethod::from_str(&http.method),
+            url: http.url.clone(),
+            headers: http
+                .headers
+                .as_deref()
+                .unwrap_or(&[])
                 .iter()
                 .map(|h| (h.key.clone(), h.value.clone()))
                 .collect(),
-            body: req
+            body: http
                 .body
                 .as_ref()
-                .and_then(|b| b.raw.clone())
+                .map(|b| b.data.clone())
                 .unwrap_or_default(),
             auth,
-            params,
+            params: http
+                .params
+                .as_deref()
+                .unwrap_or(&[])
+                .iter()
+                .map(|p| QueryParam {
+                    key: p.key.clone(),
+                    value: p.value.clone(),
+                    enabled: p.enabled,
+                })
+                .collect(),
         }
     }
 }
@@ -556,25 +491,31 @@ impl HttpResponse {
 
 pub type ItemPath = Vec<usize>;
 
-pub fn resolve_path<'a>(items: &'a [PostmanItem], path: &[usize]) -> Option<&'a PostmanItem> {
+pub fn resolve_path<'a>(items: &'a [OcItem], path: &[usize]) -> Option<&'a OcItem> {
     let (head, tail) = path.split_first()?;
     let item = items.get(*head)?;
     if tail.is_empty() {
         Some(item)
     } else {
-        resolve_path(item.item.as_deref()?, tail)
+        match item {
+            OcItem::Folder(f) => resolve_path(&f.items, tail),
+            OcItem::Request(_) => None,
+        }
     }
 }
 
 pub fn resolve_path_mut<'a>(
-    items: &'a mut Vec<PostmanItem>,
+    items: &'a mut Vec<OcItem>,
     path: &[usize],
-) -> Option<&'a mut PostmanItem> {
+) -> Option<&'a mut OcItem> {
     let (head, tail) = path.split_first()?;
     let item = items.get_mut(*head)?;
     if tail.is_empty() {
         Some(item)
     } else {
-        resolve_path_mut(item.item.as_mut()?, tail)
+        match item {
+            OcItem::Folder(f) => resolve_path_mut(&mut f.items, tail),
+            OcItem::Request(_) => None,
+        }
     }
 }

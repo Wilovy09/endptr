@@ -1,13 +1,13 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Margin, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     symbols::border::ROUNDED,
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, Clear, Paragraph, Widget, Wrap},
 };
 
-use crate::{components::centered_rect, widgets::input::TextInput};
+use crate::{components::centered_rect, widgets::input::TextInput, workflow::StepResult};
 
 /// All modal dialogs the app can show.
 #[derive(Debug)]
@@ -36,6 +36,11 @@ pub enum Modal {
         /// (key, value) pairs of secrets referenced in this request
         secrets_used: Vec<(String, String)>,
         show_secrets: bool,
+        scroll: u16,
+    },
+    WorkflowResults {
+        workflow_name: String,
+        results: Vec<StepResult>,
         scroll: u16,
     },
 }
@@ -89,6 +94,13 @@ impl Widget for &Modal {
                 scroll,
             } => {
                 render_request_info(area, buf, description, secrets_used, *show_secrets, *scroll);
+            }
+            Modal::WorkflowResults {
+                workflow_name,
+                results,
+                scroll,
+            } => {
+                render_workflow_results(area, buf, workflow_name, results, *scroll);
             }
         }
     }
@@ -325,6 +337,101 @@ fn render_request_info(
     };
     Paragraph::new(Span::styled(
         " t: toggle secrets  j/k: scroll  Esc: close ",
+        Style::new().fg(Color::DarkGray),
+    ))
+    .render(hint, buf);
+}
+
+fn render_workflow_results(
+    area: Rect,
+    buf: &mut Buffer,
+    workflow_name: &str,
+    results: &[StepResult],
+    scroll: u16,
+) {
+    let modal = centered_rect(70, 80, area);
+    Clear.render(modal, buf);
+
+    Block::bordered()
+        .border_set(ROUNDED)
+        .border_style(Style::new().fg(Color::Magenta))
+        .title(format!(" Workflow: {} ", workflow_name))
+        .render(modal, buf);
+
+    let inner = modal.inner(Margin::new(2, 1));
+    let content_area = Rect {
+        x: inner.x,
+        y: inner.y,
+        width: inner.width,
+        height: inner.height.saturating_sub(1),
+    };
+
+    let mut lines: Vec<Line> = vec![];
+
+    if results.is_empty() {
+        lines.push(Line::from(Span::styled(
+            "No steps ran.",
+            Style::new().fg(Color::DarkGray),
+        )));
+    }
+
+    for (i, step) in results.iter().enumerate() {
+        let step_label = format!("Step {}: {}", i + 1, step.step_name);
+        lines.push(Line::from(Span::styled(
+            step_label,
+            Style::new().fg(Color::Yellow).bold(),
+        )));
+
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{:<7}", step.method),
+                Style::new().fg(Color::Cyan).bold(),
+            ),
+            Span::styled(step.url.clone(), Style::new().fg(Color::White)),
+        ]));
+
+        if let Some(ref err) = step.error {
+            lines.push(Line::from(vec![
+                Span::styled("ERROR  ", Style::new().fg(Color::Red).bold()),
+                Span::styled(err.clone(), Style::new().fg(Color::Red)),
+            ]));
+        } else {
+            use crate::models::HttpResponse;
+            let status_color = (HttpResponse {
+                status: step.status,
+                status_text: String::new(),
+                response_headers: vec![],
+                body: String::new(),
+                time_ms: 0,
+            })
+            .status_color();
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format!("{}", step.status),
+                    Style::new().fg(status_color).bold(),
+                ),
+                Span::styled(
+                    format!("  {}ms", step.time_ms),
+                    Style::new().fg(Color::DarkGray),
+                ),
+            ]));
+        }
+
+        lines.push(Line::from(""));
+    }
+
+    Paragraph::new(lines)
+        .scroll((scroll, 0))
+        .render(content_area, buf);
+
+    let hint = Rect {
+        x: modal.x + 1,
+        y: modal.y + modal.height - 1,
+        width: modal.width - 2,
+        height: 1,
+    };
+    Paragraph::new(Span::styled(
+        " j/k: scroll  Esc: close ",
         Style::new().fg(Color::DarkGray),
     ))
     .render(hint, buf);
